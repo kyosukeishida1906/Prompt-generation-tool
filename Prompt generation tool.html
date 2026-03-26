@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>深津式プロンプト生成ツール Pro</title>
+<style>
+body { font-family: 'Segoe UI', sans-serif; margin:0; background: linear-gradient(135deg,#0f2027,#203a43,#2c5364); color:#fff; }
+.container { max-width:1000px; margin:40px auto; background:#1e293b; padding:30px; border-radius:15px; box-shadow:0 10px 30px rgba(0,0,0,0.5);} 
+h1 { text-align:center; margin-bottom:20px; }
+label { margin-top:15px; display:block; font-weight:bold; }
+
+/* ★ここ修正 */
+textarea {
+  width:100%;
+  padding:10px;
+  border-radius:8px;
+  border:none;
+  margin-top:5px;
+  background:#334155;
+  color:#fff;
+  min-height:100px; /* 約10行分 */
+  resize:vertical;  /* ユーザーが拡張可能 */
+}
+
+select { 
+  width:100%; 
+  padding:10px; 
+  border-radius:8px; 
+  border:none; 
+  margin-top:5px; 
+  background:#334155; 
+  color:#fff; 
+}
+
+.options, .mailOptions { margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; }
+.card { background:#334155; padding:10px 15px; border-radius:8px; cursor:pointer; }
+button { padding:10px 20px; border:none; border-radius:8px; margin-top:20px; cursor:pointer; }
+.generate { background:#3b82f6; color:#fff; }
+.copy { background:#22c55e; color:#fff; margin-left:10px; }
+#output { background:#0f172a; padding:15px; border-radius:10px; margin-top:20px; white-space:pre-wrap; }
+
+.chatgpt { 
+  background:#10a37f; 
+  color:#fff; 
+  margin-left:10px; 
+}
+
+.oneclick {
+  background:#f59e0b;
+  color:#fff;
+  margin-left:10px;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+<h1>深津式プロンプト生成ツール Pro</h1>
+
+<label>用途選択</label>
+<select id="taskType" onchange="applyTemplate()">
+<option value="">選択してください</option>
+<option value="メール作成">メール作成</option>
+<option value="アイディア発散">アイディア発散（ブレスト）</option>
+<option value="アイディア深掘り">アイディア深掘り（具体化）</option>
+<option value="アイディア評価">アイディア評価（比較）</option>
+<option value="議事録テンプレ">議事録（テンプレ）</option>
+<option value="Excel関数">Excel関数</option>
+<option value="マニュアル作成">マニュアル作成</option>
+<option value="原因分析">原因分析</option>
+<option value="業務改善">業務改善</option>
+<option value="アジェンダ">アジェンダ作成</option>
+<option value="要約">要約</option>
+<option value="時短">時短アイディア</option>
+<option value="ヒヤリハット">ヒヤリハット分析</option>
+<option value="コード修正">コード修正</option>
+</select>
+
+<div id="mailTemplateArea" style="display:none;">
+<label>メールテンプレ選択</label>
+<div class="mailOptions">
+<div class="card" onclick="setMailTemplate('business')">ビジネス</div>
+<div class="card" onclick="setMailTemplate('internal')">社内</div>
+<div class="card" onclick="setMailTemplate('casual')">カジュアル</div>
+</div>
+</div>
+
+<label>＃命令書 あなたは［プロの○○］です。以下の制約条件と入力文をもとに、最高の結果を出力してください。</label>
+<textarea id="instruction" rows="10"></textarea>
+
+<label>＃制約条件[文字数やフォーマットの指定][トーン＆マナーの指定][絶対に避けるべき事項]</label>
+<textarea id="constraints" rows="10"></textarea>
+
+<label>＃入力文[背景、文脈、処理させたい生データなどを記述]</label>
+<textarea id="inputText" rows="10"></textarea>
+
+<label>＃出力文[出力してほしい具体的なレイアウトや構成を記述]</label>
+<textarea id="outputFormat" rows="10"></textarea>
+
+<label>オプション</label>
+<div class="options">
+<label><input type="checkbox" value="このタスクで最高の結果を出すために、追加の情報が必要な場合は質問してください。"> 追加質問</label>
+<label><input type="checkbox" value="ステップバイステップで考え、順を追って出力してください。"> ステップ思考</label>
+<label><input type="checkbox" value="専門家として最適な回答をしてください。"> 専門家</label>
+</div>
+
+<button class="generate" onclick="generatePrompt()">生成</button>
+<button class="copy" onclick="copyPrompt()">コピー</button>
+<button class="chatgpt" onclick="openChatGPT()">ChatGPTで開く</button>
+<button class="oneclick" onclick="generateAndOpen()">ワンクリック実行</button>
+
+<div id="output"></div>
+</div>
+
+<script>
+function applyTemplate(){
+  const type = document.getElementById('taskType').value;
+
+  // 一旦クリア（重要）
+  document.getElementById('instruction').value = '';
+  document.getElementById('constraints').value = '';
+  document.getElementById('inputText').value = '';
+  document.getElementById('outputFormat').value = '';
+
+  // メールテンプレ表示制御
+  document.getElementById('mailTemplateArea').style.display = 
+    type === 'メール作成' ? 'block' : 'none';
+
+  // ▼ここが重要（分岐をここに集約）
+  if(type === 'アイディア発散') return setMailTemplate('idea_expand');
+  if(type === 'アイディア深掘り') return setMailTemplate('idea_deepen');
+  if(type === 'アイディア評価') return setMailTemplate('idea_evaluate');
+
+  // それ以外はそのまま渡す
+  setMailTemplate(type);
+}
+
+function setMailTemplate(type){
+  if(type==='business'){
+    document.getElementById('instruction').value = `あなたは社内コミュニケーションに精通したビジネス文章のプロフェッショナルです。
+以下の制約条件と入力文を基に、分かりやすく簡潔な社内メールを作成してください。`;
+
+    document.getElementById('constraints').value = `・要点重視（無駄な前置き禁止）
+・結論→詳細の順で記載
+・箇条書きを適宜使用
+・敬語は丁寧だが堅すぎない
+・社内向けのため簡潔さを最優先
+・曖昧な表現は禁止（例：「適宜」「なるべく」など）`;
+
+    document.getElementById('outputFormat').value = `件名：
+本文：
+・目的
+・内容
+・依頼事項（あれば）
+・期限（あれば）`;
+  }
+
+  if(type==='internal'){
+    document.getElementById('instruction').value = `あなたは対外ビジネスメールのプロフェッショナルです。
+以下の制約条件と入力文を基に、失礼のない丁寧で信頼感のあるメールを作成してください。`;
+
+    document.getElementById('constraints').value = `・丁寧かつフォーマルな敬語を使用
+・クッション言葉を適切に使用
+・結論を明確にする
+・相手に配慮した表現にする
+・長すぎず簡潔にまとめる
+・誤解を招く表現は禁止
+・会社名・担当者名の体裁を整える`;
+
+    document.getElementById('outputFormat').value = `件名：
+宛名：
+本文：
+（導入挨拶）
+（要件・目的）
+（詳細説明）
+（依頼・お願い）
+（締めの挨拶）
+署名：`;
+  }
+
+  if(type==='casual'){
+    document.getElementById('instruction').value = `あなたは社内チャットコミュニケーションのプロフェッショナルです。
+以下の制約条件と入力文を基に、読みやすく親しみやすいメッセージを作成してください。`;
+
+    document.getElementById('constraints').value = `・簡潔でフレンドリー
+・1文は短く
+・改行を適度に使用
+・絵文字は必要に応じて1〜2個まで
+・ビジネスマナーは保つ（馴れ馴れしすぎ禁止）
+・要点が一目で分かる構成`;
+
+    document.getElementById('outputFormat').value = `そのまま送信できるチャット形式`;
+  }
+if(type==='idea_expand'){
+  document.getElementById('instruction').value = `あなたはアイディア創出のプロフェッショナルです。
+既存の枠にとらわれず、多角的な視点から新しい発想を生み出してください。`;
+
+  document.getElementById('constraints').value = `・量を最優先（最低10案以上）
+・否定や評価はしない
+・自由な発想を重視
+・具体性より広がりを優先
+・既存アイディアの組み合わせOK`;
+
+  document.getElementById('inputText').value = `テーマ：
+目的：
+制約条件：
+ターゲット：`;
+
+  document.getElementById('outputFormat').value = `■アイディア一覧
+①
+②
+③
+…
+（最低10案以上）`;
+}
+
+if(type==='idea_deepen'){
+  document.getElementById('instruction').value = `あなたは事業企画のプロフェッショナルです。
+提示されたアイディアを実行可能なレベルまで具体化してください。`;
+
+  document.getElementById('constraints').value = `・具体性重視
+・実行ステップを明確化
+・必要なリソースを明記
+・リスクも提示
+・現実的な内容にする`;
+
+  document.getElementById('inputText').value = `アイディア：
+目的：
+ターゲット：`;
+
+  document.getElementById('outputFormat').value = `■概要
+■実施ステップ
+■必要リソース
+■想定効果
+■リスク`;
+}
+
+if(type==='idea_evaluate'){
+  document.getElementById('instruction').value = `あなたは経営コンサルタントです。
+複数のアイディアを客観的に評価し、最適な案を選定してください。`;
+
+  document.getElementById('constraints').value = `・比較表で整理
+・評価基準を明確化
+・メリット・デメリット両方記載
+・結論を必ず出す
+・主観ではなく論理で判断`;
+
+  document.getElementById('inputText').value = `評価したいアイディア：
+評価軸（任意）：`;
+
+  document.getElementById('outputFormat').value = `■比較表
+■総評
+■推奨案（理由付き）`;
+}
+// ===== 業務テンプレ群 =====
+
+if(type==='議事録テンプレ'){
+document.getElementById('instruction').value =
+`あなたは議事録作成のプロフェッショナルです。
+入力された会議メモを基に、誰が見ても分かる整理された議事録を作成してください。`;
+
+document.getElementById('constraints').value =
+`・結論を明確にする
+・決定事項と未決事項を分ける
+・発言内容は要点のみ記載
+・箇条書きを使用
+・読みやすさ重視`;
+
+document.getElementById('inputText').value = `会議メモ：`;
+
+document.getElementById('outputFormat').value =
+`■会議概要
+■決定事項
+■未決事項
+■今後の対応
+■補足`;
+}
+
+if(type==='Excel関数'){
+document.getElementById('instruction').value =
+`あなたはExcel関数の専門家です。
+入力された内容から最適な関数を提案してください。`;
+
+document.getElementById('constraints').value =
+`・初心者でも理解できる説明
+・関数はコピペ可能形式
+・複数案提示OK
+・使用例を必ず記載`;
+
+document.getElementById('inputText').value = `やりたいこと：`;
+
+document.getElementById('outputFormat').value =
+`■関数
+■説明
+■使用例
+■別案（あれば）`;
+}
+
+if(type==='マニュアル作成'){
+document.getElementById('instruction').value =
+`あなたは業務マニュアル作成のプロフェッショナルです。
+入力内容を基に、新人でも理解できるマニュアルを作成してください。`;
+
+document.getElementById('constraints').value =
+`・手順を番号付きで記載
+・専門用語は噛み砕く
+・具体的な操作を明記
+・読みやすさ重視`;
+
+document.getElementById('inputText').value = `作業内容：`;
+
+document.getElementById('outputFormat').value =
+`■概要
+■手順
+①
+②
+③
+■注意点`;
+}
+
+if(type==='原因分析'){
+document.getElementById('instruction').value =
+`あなたは問題解決のプロフェッショナルです。
+発生した事象から考えられる原因を多角的に分析してください。`;
+
+document.getElementById('constraints').value =
+`・原因は複数提示
+・技術的／人的／環境的に分類
+・否定しない
+・網羅性重視`;
+
+document.getElementById('inputText').value = `発生した問題：`;
+
+document.getElementById('outputFormat').value =
+`■原因候補
+（技術）
+（人的）
+（環境）
+■優先度`;
+}
+
+if(type==='業務改善'){
+document.getElementById('instruction').value =
+`あなたは業務改善のプロフェッショナルです。
+現状の業務から改善アイディアを多角的に提案してください。`;
+
+document.getElementById('constraints').value =
+`・量を重視（最低10案）
+・実現性は問わない
+・既存の組み合わせOK
+・自由な発想`;
+
+document.getElementById('inputText').value = `現状業務：`;
+
+document.getElementById('outputFormat').value =
+`■改善アイディア
+①
+②
+③
+…`;
+}
+
+if(type==='アジェンダ'){
+document.getElementById('instruction').value =
+`あなたは会議設計のプロフェッショナルです。
+目的に応じた最適なアジェンダを作成してください。`;
+
+document.getElementById('constraints').value =
+`・時間配分を明確にする
+・目的達成に直結させる
+・無駄を排除
+・進行しやすい構成`;
+
+document.getElementById('inputText').value = `会議目的：`;
+
+document.getElementById('outputFormat').value =
+`■会議アジェンダ
+（時間／内容）`;
+}
+
+if(type==='要約'){
+document.getElementById('instruction').value =
+`あなたは情報整理のプロフェッショナルです。
+文章を要約し、重要ポイントを抽出してください。`;
+
+document.getElementById('constraints').value =
+`・結論を最優先
+・箇条書き
+・無駄な表現を削除
+・簡潔に`;
+
+document.getElementById('inputText').value = `対象文章：`;
+
+document.getElementById('outputFormat').value =
+`■要約
+■重要ポイント
+■結論`;
+}
+
+if(type==='時短'){
+document.getElementById('instruction').value =
+`あなたは業務効率化のプロフェッショナルです。
+作業の時間短縮アイディアを提案してください。`;
+
+document.getElementById('constraints').value =
+`・最低10案
+・IT活用含む
+・自動化視点を含める
+・自由な発想`;
+
+document.getElementById('inputText').value = `作業内容：`;
+
+document.getElementById('outputFormat').value =
+`■時短アイディア
+①
+②
+③
+…`;
+}
+
+if(type==='ヒヤリハット'){
+document.getElementById('instruction').value =
+`あなたは安全管理のプロフェッショナルです。
+事例からリスクと再発防止策を洗い出してください。`;
+
+document.getElementById('constraints').value =
+`・原因と対策をセットで提示
+・複数案提示
+・現場視点重視
+・網羅性重視`;
+
+document.getElementById('inputText').value = `事例：`;
+
+document.getElementById('outputFormat').value =
+`■リスク
+■原因
+■対策`;
+}
+if(type==='コード修正'){
+document.getElementById('instruction').value =
+`あなたはプログラミングのプロフェッショナルです。
+入力されたコードの不具合を特定し、原因を明確にした上で、修正済みコードを提示してください。`;
+
+document.getElementById('constraints').value =
+`・必ず「原因」と「修正内容」を分けて説明する
+・初心者でも理解できる説明にする
+・動作する完全なコードを提示する
+・不要な変更は加えない
+・エラー原因は具体的に指摘する（曖昧禁止）`;
+
+document.getElementById('inputText').value = `対象コード：`;
+
+document.getElementById('outputFormat').value =
+`■原因
+■修正内容
+■修正後コード（コピペ可能）`;
+}
+}
+
+function generatePrompt(){
+  const taskType = document.getElementById('taskType').value;
+  const instruction = document.getElementById('instruction').value;
+  const constraints = document.getElementById('constraints').value;
+  const inputText = document.getElementById('inputText').value;
+  const outputFormat = document.getElementById('outputFormat').value;
+
+  const options = document.querySelectorAll('.options input:checked');
+  let optionText='';
+  options.forEach(opt=> optionText += opt.value + '\n');
+
+  let prompt='';
+  if(taskType) prompt += '【用途】\n'+taskType+'\n\n';
+  prompt += '＃命令書:\n'+instruction+'\n\n';
+  prompt += '＃制約条件:\n'+constraints+'\n\n';
+  prompt += '＃入力文:\n'+inputText+'\n\n';
+  prompt += '＃出力文:\n'+outputFormat+'\n\n';
+  if(optionText) prompt += '＃追加指示:\n'+optionText;
+
+  document.getElementById('output').textContent = prompt;
+}
+
+function copyPrompt(){
+  navigator.clipboard.writeText(document.getElementById('output').textContent);
+  alert('コピーしました');
+}
+
+// ▼ここに追加
+
+// ▼ここに追加
+
+function openChatGPT(){
+  const prompt = document.getElementById('output').textContent;
+
+  if(!prompt){
+    alert('先にプロンプトを生成してください');
+    return;
+  }
+
+  // ChatGPTを開く
+    window.open('https://chat.openai.com/', '_blank');
+}
+
+
+// ★ワンクリック機能（外に出す）
+function generateAndOpen(){
+  // ① 生成
+  generatePrompt();
+
+  // ② 少し待ってから処理（重要）
+  setTimeout(() => {
+    const prompt = document.getElementById('output').textContent;
+
+    if(!prompt){
+      alert('プロンプトが生成されていません');
+      return;
+    }
+
+    // ③ コピー
+    navigator.clipboard.writeText(prompt);
+
+    // ④ ChatGPTを開く
+window.open('https://chat.openai.com/?prompt=' + encodeURIComponent(prompt), '_blank');
+  }, 100);
+}
+</script>
+
+</body>
+</html>
