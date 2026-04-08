@@ -50,6 +50,13 @@ button { padding:10px 20px; border:none; border-radius:8px; margin-top:20px; cur
   color:#fff;
   margin-left:10px;
 }
+
+.gemini {
+  background:#8e44ad;
+  color:#fff;
+  margin-left:10px;
+}
+
 </style>
 </head>
 <body>
@@ -68,7 +75,8 @@ button { padding:10px 20px; border:none; border-radius:8px; margin-top:20px; cur
 <option value="Excel関数">Excel関数</option>
 <option value="マニュアル作成">マニュアル作成</option>
 <option value="原因分析">原因分析</option>
-<option value="業務改善">業務改善</option>
+<option value="業務改善">業務改善提案</option>
+<option value="改善VA">改善・VA提案書作成</option>
 <option value="アジェンダ">アジェンダ作成</option>
 <option value="要約">要約</option>
 <option value="時短">時短アイディア</option>
@@ -81,7 +89,7 @@ button { padding:10px 20px; border:none; border-radius:8px; margin-top:20px; cur
 <div class="mailOptions">
 <div class="card" onclick="setMailTemplate('business')">ビジネス</div>
 <div class="card" onclick="setMailTemplate('internal')">社内</div>
-<div class="card" onclick="setMailTemplate('casual')">カジュアル</div>
+<div class="card" onclick="setMailTemplate('casual')">チャット</div>
 </div>
 </div>
 
@@ -108,6 +116,7 @@ button { padding:10px 20px; border:none; border-radius:8px; margin-top:20px; cur
 <button class="copy" onclick="copyPrompt()">コピー</button>
 <button class="chatgpt" onclick="openChatGPT()">ChatGPTで開く</button>
 <button class="oneclick" onclick="generateAndOpen()">ワンクリック実行</button>
+<button class="gemini" onclick="openGemini()">Geminiで開く</button>
 
 <div id="output"></div>
 </div>
@@ -339,6 +348,7 @@ document.getElementById('outputFormat').value =
 ■優先度`;
 }
 
+// ===== 業務改善提案 =====
 if(type==='業務改善'){
 document.getElementById('instruction').value =
 `あなたは業務改善のプロフェッショナルです。
@@ -358,6 +368,32 @@ document.getElementById('outputFormat').value =
 ②
 ③
 …`;
+}
+
+
+// ===== 改善VA =====
+if(type==='改善VA'){
+document.getElementById('instruction').value =
+`あなたは業務改善およびVA（Value Analysis）のプロフェッショナルです。
+コスト削減と価値向上の両面から最適な改善提案書を作成および文章の添削をしてください。`;
+
+document.getElementById('constraints').value =
+`・現状と課題を明確にする
+・コスト視点と価値視点の両方を含める
+・定量的な効果を可能な限り示す
+・実現性のある提案にする
+・専門用語は分かりやすく説明する`;
+
+document.getElementById('inputText').value =
+`改善前のやり方、状況：
+
+改善後のやり方、状況：`;
+
+document.getElementById('outputFormat').value =
+`■件名(タイトル)「○○活用による××」
+■改善前のやり方・状況(改善前の提案内容)
+■改善後のやり方・状況(改善後の提案内容)
+■改善効果（コスト・工数・品質）`;
 }
 
 if(type==='アジェンダ'){
@@ -484,10 +520,6 @@ function copyPrompt(){
   alert('コピーしました');
 }
 
-// ▼ここに追加
-
-// ▼ここに追加
-
 function openChatGPT(){
   const prompt = document.getElementById('output').textContent;
 
@@ -522,6 +554,20 @@ function generateAndOpen(){
 window.open('https://chat.openai.com/?prompt=' + encodeURIComponent(prompt), '_blank');
   }, 100);
 }
+
+function openGemini(){
+  const prompt = document.getElementById('output').textContent;
+
+  if(!prompt){
+    alert('先にプロンプトを生成してください');
+    return;
+  }
+
+  navigator.clipboard.writeText(prompt);
+
+  window.open('https://gemini.google.com/gem/ec07e7f374be', '_blank');
+}
+
 </script>
 
 </body>
